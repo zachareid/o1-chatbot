@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Ultimate Coding Assistant</title>
+        <meta charset="UTF-8" />
+        <style>
+            /* Basic styles for the chat interface */
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #1e1e1e;
+                margin: 0;
+                padding: 0;
+                color: #fff;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+            }
+            #chatbox {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                max-width: 800px;
+                margin: 0 auto;
+                width: 100%;
+            }
+            #messages {
+                flex: 1;
+                padding: 20px;
+                overflow-y: auto;
+                background-color: #2d2d2d;
+            }
+            .message {
+                margin-bottom: 15px;
+                display: flex;
+            }
+            .message-content {
+                max-width: 80%;
+                padding: 10px 15px;
+                border-radius: 8px;
+                line-height: 1.5;
+                word-break: break-word;
+            }
+            .user {
+                justify-content: flex-end;
+            }
+            .user .message-content {
+                background-color: #007acc;
+                border-bottom-right-radius: 0;
+                color: #fff;
+            }
+            .assistant {
+                justify-content: flex-start;
+            }
+            .assistant .message-content {
+                background-color: #1e1e1e;
+                border-bottom-left-radius: 0;
+                color: #dcdcdc;
+            }
+            #inputForm {
+                display: flex;
+                border-top: 1px solid #3c3c3c;
+                background-color: #252526;
+                padding: 10px;
+                flex-direction: column;
+            }
+            #modelSelect {
+                margin-bottom: 10px;
+                padding: 5px;
+                font-size: 16px;
+                border: none;
+                border-radius: 4px;
+                background-color: #1e1e1e;
+                color: #fff;
+            }
+            #userInput {
+                flex: 1;
+                height: 80px;
+                font-size: 16px;
+                border: none;
+                outline: none;
+                background-color: #1e1e1e;
+                color: #fff;
+                border-radius: 4px;
+                resize: none;
+                padding: 10px;
+            }
+            #sendBtn {
+                padding: 10px 20px;
+                font-size: 16px;
+                border: none;
+                background-color: #0e639c;
+                color: #fff;
+                cursor: pointer;
+                margin-top: 10px;
+                border-radius: 4px;
+                align-self: flex-end;
+            }
+            #sendBtn:hover {
+                background-color: #1177bb;
+            }
+            .loading {
+                text-align: center;
+                margin-top: 10px;
+                font-style: italic;
+                color: #ccc;
+            }
+            @media screen and (max-width: 600px) {
+                .message-content {
+                    max-width: 100%;
+                }
+                #userInput {
+                    height: 60px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="chatbox">
+            <div id="messages"></div>
+            <form id="inputForm">
+                <select id="modelSelect">
+                    <option value="o1-preview">o1-preview</option>
+                    <option value="o1-mini">o1-mini</option>
+                </select>
+                <textarea
+                    id="userInput"
+                    placeholder="Type your message here..."
+                    autocomplete="off"
+                    required
+                ></textarea>
+                <button type="submit" id="sendBtn">Send</button>
+            </form>
+        </div>
+
+        <script>
+            const messagesDiv = document.getElementById("messages");
+            const inputForm = document.getElementById("inputForm");
+            const userInput = document.getElementById("userInput");
+            const modelSelect = document.getElementById("modelSelect");
+
+            // Initialize the conversation without a system message
+            let conversation = [];
+
+            inputForm.addEventListener("submit", function (e) {
+                e.preventDefault();
+                const userText = userInput.value.trim();
+                if (userText === "") return;
+
+                addMessage("user", userText);
+
+                // If it's the first message, include the system prompt in the user's message
+                if (conversation.length === 0) {
+                    conversation.push({
+                        role: "user",
+                        content:
+                            'You are an expert coding assistant. Always provide complete code files in your responses, never partial code or placeholders like "existing implementation here". Aim to help me achieve my tasks in a single interaction to maximize my productivity. Try to one-shot every solution. \n\n' + userText,
+                    });
+                } else {
+                    conversation.push({
+                        role: "user",
+                        content: userText,
+                    });
+                }
+
+                userInput.value = "";
+
+                // Show loading message
+                const loadingMessage = document.createElement("div");
+                loadingMessage.className = "loading";
+                loadingMessage.textContent = "Assistant is typing...";
+                messagesDiv.appendChild(loadingMessage);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+                // Get the selected model from the dropdown
+                const selectedModel = modelSelect.value;
+
+                fetch("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: "Bearer <code>",
+                    },
+                    body: JSON.stringify({
+                        model: selectedModel,
+                        messages: conversation,
+                        max_completion_tokens: 32768, // Adjust as needed
+                    }),
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then((data) => {
+                        // Remove loading message if it exists
+                        if (messagesDiv.contains(loadingMessage)) {
+                            messagesDiv.removeChild(loadingMessage);
+                        }
+
+                        const assistantContent = data.choices[0].message.content;
+
+                        addMessage("assistant", assistantContent);
+                        conversation.push({
+                            role: "assistant",
+                            content: assistantContent,
+                        });
+                    })
+                    .catch((error) => {
+                        console.error("Error:", error);
+                        // Remove loading message if it exists
+                        if (messagesDiv.contains(loadingMessage)) {
+                            messagesDiv.removeChild(loadingMessage);
+                        }
+                        addMessage(
+                            "assistant",
+                            "Sorry, there was an error processing your request."
+                        );
+                    });
+            });
+
+            function addMessage(sender, text) {
+                const messageWrapper = document.createElement("div");
+                messageWrapper.classList.add("message", sender);
+
+                const messageContent = document.createElement("div");
+                messageContent.classList.add("message-content");
+
+                // Simple code block detection and formatting
+                const formattedText = text.replace(
+                    /```([\s\S]*?)```/g,
+                    function (match, p1) {
+                        return '<pre><code>' + escapeHtml(p1) + '</code></pre>';
+                    }
+                );
+                messageContent.innerHTML = formattedText;
+
+                messageWrapper.appendChild(messageContent);
+                messagesDiv.appendChild(messageWrapper);
+
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                userInput.focus();
+            }
+
+            function escapeHtml(unsafe) {
+                return unsafe
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+        </script>
+    </body>
+</html>
